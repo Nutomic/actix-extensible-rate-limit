@@ -8,7 +8,7 @@ pub mod memory;
 #[cfg_attr(docsrs, doc(cfg(feature = "redis")))]
 pub mod redis;
 
-pub use input_builder::{SimpleInputFunctionBuilder, SimpleInputFuture};
+pub use input_builder::{ip_key, SimpleInputFunctionBuilder, SimpleInputFuture};
 use std::future::Future;
 
 use crate::HeaderCompatibleOutput;

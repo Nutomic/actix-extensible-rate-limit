@@ -122,7 +122,7 @@ impl SimpleInputFunctionBuilder {
 }
 
 #[derive(Debug, Error)]
-enum Error {
+pub enum Error {
     #[error("Unable to parse remote IP address: {0}")]
     InvalidIpError(
         #[source]
@@ -136,7 +136,7 @@ impl ResponseError for Error {}
 // Groups IPv6 addresses together, see:
 // https://adam-p.ca/blog/2022/02/ipv6-rate-limiting/
 // https://support.cloudflare.com/hc/en-us/articles/115001635128-Configuring-Cloudflare-Rate-Limiting
-fn ip_key(ip_str: &str) -> Result<String, Error> {
+pub fn ip_key(ip_str: &str) -> Result<String, Error> {
     let ip = ip_str.parse::<IpAddr>()?;
     Ok(match ip {
         IpAddr::V4(v4) => v4.to_string(),
