@@ -33,11 +33,11 @@ impl InMemoryBackend {
             interval.as_secs_f64() > 0f64,
             "GC interval must be non-zero"
         );
-        actix_web::rt::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 let now = Instant::now();
                 map.retain(|_k, v| v.ttl > now);
-                actix_web::rt::time::sleep_until(now + interval).await;
+                tokio::time::sleep_until(now + interval).await;
             }
         })
     }
