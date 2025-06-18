@@ -9,7 +9,7 @@
 //! #[actix_web::main]
 //! async fn main() -> std::io::Result<()> {
 //!     // A backend is responsible for storing rate limit data, and choosing whether to allow/deny requests
-//!     let backend = InMemoryBackend::builder().build();
+//!     let backend = InMemoryBackend::<String>::builder().build();
 //!     HttpServer::new(move || {
 //!         // Assign a limit of 5 requests per minute per client ip address
 //!         let input = SimpleInputFunctionBuilder::new(Duration::from_secs(60), 5)

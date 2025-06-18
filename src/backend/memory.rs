@@ -3,6 +3,7 @@ use actix_web::rt::task::JoinHandle;
 use actix_web::rt::time::Instant;
 use dashmap::DashMap;
 use std::convert::Infallible;
+use std::hash::Hash;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,8 +12,8 @@ pub const DEFAULT_GC_INTERVAL_SECONDS: u64 = 60 * 10;
 /// A Fixed Window rate limiter [Backend] that uses [Dashmap](dashmap::DashMap) to store keys
 /// in memory.
 #[derive(Clone)]
-pub struct InMemoryBackend {
-    map: Arc<DashMap<String, Value>>,
+pub struct InMemoryBackend<T = String> {
+    map: Arc<DashMap<T, Value>>,
     gc_handle: Option<Arc<JoinHandle<()>>>,
 }
 
@@ -21,14 +22,17 @@ struct Value {
     count: u64,
 }
 
-impl InMemoryBackend {
+impl<T> InMemoryBackend<T>
+where
+    T: Eq + Hash + Sync + Send + 'static,
+{
     pub fn builder() -> Builder {
         Builder {
             gc_interval: Some(Duration::from_secs(DEFAULT_GC_INTERVAL_SECONDS)),
         }
     }
 
-    fn garbage_collector(map: Arc<DashMap<String, Value>>, interval: Duration) -> JoinHandle<()> {
+    fn garbage_collector(map: Arc<DashMap<T, Value>>, interval: Duration) -> JoinHandle<()> {
         assert!(
             interval.as_secs_f64() > 0f64,
             "GC interval must be non-zero"
@@ -58,8 +62,11 @@ impl Builder {
         self
     }
 
-    pub fn build(self) -> InMemoryBackend {
-        let map = Arc::new(DashMap::<String, Value>::new());
+    pub fn build<T>(self) -> InMemoryBackend<T>
+    where
+        T: Eq + Hash + Clone + Send + Sync + 'static,
+    {
+        let map = Arc::new(DashMap::<T, Value>::new());
         let gc_handle = self.gc_interval.map(|gc_interval| {
             Arc::new(InMemoryBackend::garbage_collector(map.clone(), gc_interval))
         });
@@ -67,14 +74,17 @@ impl Builder {
     }
 }
 
-impl Backend<SimpleInput> for InMemoryBackend {
+impl<T> Backend<SimpleInput<T>> for InMemoryBackend<T>
+where
+    T: Eq + Hash + Clone + 'static,
+{
     type Output = SimpleOutput;
-    type RollbackToken = String;
+    type RollbackToken = T;
     type Error = Infallible;
 
     async fn request(
         &self,
-        input: SimpleInput,
+        input: SimpleInput<T>,
     ) -> Result<(Decision, Self::Output, Self::RollbackToken), Self::Error> {
         let now = Instant::now();
         let mut count = 1;
@@ -117,14 +127,14 @@ impl Backend<SimpleInput> for InMemoryBackend {
     }
 }
 
-impl SimpleBackend for InMemoryBackend {
+impl SimpleBackend for InMemoryBackend<String> {
     async fn remove_key(&self, key: &str) -> Result<(), Self::Error> {
         self.map.remove(key);
         Ok(())
     }
 }
 
-impl Drop for InMemoryBackend {
+impl<T> Drop for InMemoryBackend<T> {
     fn drop(&mut self) {
         if let Some(handle) = &self.gc_handle {
             handle.abort();
@@ -141,7 +151,7 @@ mod tests {
     #[actix_web::test]
     async fn test_allow_deny() {
         tokio::time::pause();
-        let backend = InMemoryBackend::builder().build();
+        let backend = InMemoryBackend::<String>::builder().build();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 5,
@@ -160,7 +170,9 @@ mod tests {
     #[actix_web::test]
     async fn test_reset() {
         tokio::time::pause();
-        let backend = InMemoryBackend::builder().with_gc_interval(None).build();
+        let backend = InMemoryBackend::<String>::builder()
+            .with_gc_interval(None)
+            .build();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 1,
@@ -183,7 +195,7 @@ mod tests {
     #[actix_web::test]
     async fn test_garbage_collection() {
         tokio::time::pause();
-        let backend = InMemoryBackend::builder()
+        let backend = InMemoryBackend::<String>::builder()
             .with_gc_interval(Some(MINUTE))
             .build();
         backend
@@ -214,7 +226,7 @@ mod tests {
     #[actix_web::test]
     async fn test_output() {
         tokio::time::pause();
-        let backend = InMemoryBackend::builder().build();
+        let backend = InMemoryBackend::<String>::builder().build();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 2,
@@ -243,7 +255,7 @@ mod tests {
     #[actix_web::test]
     async fn test_rollback() {
         tokio::time::pause();
-        let backend = InMemoryBackend::builder().build();
+        let backend = InMemoryBackend::<String>::builder().build();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 5,
@@ -260,7 +272,9 @@ mod tests {
     #[actix_web::test]
     async fn test_remove_key() {
         tokio::time::pause();
-        let backend = InMemoryBackend::builder().with_gc_interval(None).build();
+        let backend = InMemoryBackend::<String>::builder()
+            .with_gc_interval(None)
+            .build();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 1,

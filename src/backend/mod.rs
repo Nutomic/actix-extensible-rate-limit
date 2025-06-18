@@ -8,7 +8,9 @@ pub mod memory;
 #[cfg_attr(docsrs, doc(cfg(feature = "redis")))]
 pub mod redis;
 
-pub use input_builder::{ip_key, SimpleInputFunctionBuilder, SimpleInputFuture};
+pub use input_builder::{
+    raw_ip_key, string_ip_key, MyIpAddr, SimpleInputFunctionBuilder, SimpleInputFuture,
+};
 use std::future::Future;
 
 use crate::HeaderCompatibleOutput;
@@ -44,7 +46,7 @@ impl Decision {
 /// A Backend is required to implement [Clone], usually this means wrapping your data store within
 /// an [Arc](std::sync::Arc), although many connection pools already do so internally; there is no
 /// need to wrap it twice.
-pub trait Backend<I: 'static = SimpleInput>: Clone {
+pub trait Backend<I: 'static = SimpleInput<String>>: Clone {
     type Output;
     type RollbackToken;
     type Error;
@@ -82,13 +84,13 @@ pub trait Backend<I: 'static = SimpleInput>: Clone {
 ///
 /// This may not be suitable for all use-cases.
 #[derive(Debug, Clone)]
-pub struct SimpleInput {
+pub struct SimpleInput<T> {
     /// The rate limiting interval.
     pub interval: Duration,
     /// The total requests to be allowed within the interval.
     pub max_requests: u64,
     /// The rate limit key to be used for this request.
-    pub key: String,
+    pub key: T,
 }
 
 /// A default [Backend::Output] structure.
@@ -105,7 +107,7 @@ pub struct SimpleOutput {
 }
 
 /// Additional functions for a [Backend] that uses [SimpleInput] and [SimpleOutput].
-pub trait SimpleBackend: Backend<SimpleInput, Output = SimpleOutput> {
+pub trait SimpleBackend: Backend<SimpleInput<String>, Output = SimpleOutput> {
     /// Removes the bucket for a given rate limit key.
     ///
     /// Intended to be used to reset a key before changing the interval.

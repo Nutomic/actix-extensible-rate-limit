@@ -2,13 +2,14 @@ use crate::backend::SimpleInput;
 use actix_web::dev::ServiceRequest;
 use actix_web::ResponseError;
 use std::future::{ready, Ready};
-use std::net::{AddrParseError, IpAddr, Ipv6Addr};
+use std::net::{AddrParseError, IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::str::FromStr;
 use std::time::Duration;
 use thiserror::Error;
 
 type CustomFn = Box<dyn Fn(&ServiceRequest) -> Result<String, actix_web::Error>>;
 
-pub type SimpleInputFuture = Ready<Result<SimpleInput, actix_web::Error>>;
+pub type SimpleInputFuture<T = String> = Ready<Result<SimpleInput<T>, actix_web::Error>>;
 
 /// Utility to create a input function that produces a [SimpleInput].
 ///
@@ -98,10 +99,10 @@ impl SimpleInputFunctionBuilder {
                     components.push(custom.clone());
                 }
                 if self.real_ip_key {
-                    components.push(ip_key(info.realip_remote_addr().unwrap())?)
+                    components.push(string_ip_key(info.realip_remote_addr()))
                 }
                 if self.peer_ip_key {
-                    components.push(ip_key(info.peer_addr().unwrap())?)
+                    components.push(string_ip_key(info.peer_addr()))
                 }
                 if self.path_key {
                     components.push(req.path().to_owned());
@@ -133,16 +134,19 @@ pub enum Error {
 
 impl ResponseError for Error {}
 
-// Groups IPv6 addresses together, see:
-// https://adam-p.ca/blog/2022/02/ipv6-rate-limiting/
-// https://support.cloudflare.com/hc/en-us/articles/115001635128-Configuring-Cloudflare-Rate-Limiting
-pub fn ip_key(ip_str: &str) -> Result<String, Error> {
-    let ip = ip_str.parse::<IpAddr>()?;
-    Ok(match ip {
+/// Generate a string key for backend. Uses more memory but can easily be combined with other
+/// data like path or custom keys.
+///
+/// Groups IPv6 addresses together, see:
+/// https://adam-p.ca/blog/2022/02/ipv6-rate-limiting/
+/// https://support.cloudflare.com/hc/en-us/articles/115001635128-Configuring-Cloudflare-Rate-Limiting
+pub fn string_ip_key(ip_str: Option<&str>) -> String {
+    let ip = parse_ip(ip_str);
+    match ip {
         IpAddr::V4(v4) => v4.to_string(),
         IpAddr::V6(v6) => {
             if let Some(v4) = v6.to_ipv4() {
-                return Ok(v4.to_string());
+                return v4.to_string();
             }
             let zeroes = [0u16; 4];
             let concat = [&v6.segments()[0..4], &zeroes].concat();
@@ -150,7 +154,38 @@ pub fn ip_key(ip_str: &str) -> Result<String, Error> {
             let subnet = Ipv6Addr::from(concat);
             format!("{}/64", subnet)
         }
-    })
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum MyIpAddr {
+    V4(Ipv4Addr),
+    V6([u16; 4]),
+}
+
+impl From<IpAddr> for MyIpAddr {
+    fn from(value: IpAddr) -> Self {
+        match value {
+            IpAddr::V4(addr) => MyIpAddr::V4(addr),
+            IpAddr::V6(addr) => MyIpAddr::V6(addr.segments()[..4].try_into().unwrap()),
+        }
+    }
+}
+
+/// Generate a raw byte key for backend which uses less memory.
+pub fn raw_ip_key(ip_str: Option<&str>) -> MyIpAddr {
+    parse_ip(ip_str).into()
+}
+
+fn parse_ip(addr: Option<&str>) -> IpAddr {
+    if let Some(addr) = addr {
+        if let Ok(ip) = IpAddr::from_str(addr) {
+            return ip;
+        } else if let Ok(socket) = SocketAddr::from_str(addr) {
+            return socket.ip();
+        }
+    }
+    Ipv4Addr::new(127, 0, 0, 1).into()
 }
 
 #[cfg(test)]
@@ -160,13 +195,33 @@ mod tests {
     #[test]
     fn test_ip_key() {
         // Check that IPv4 addresses are preserved
-        assert_eq!(ip_key("142.250.187.206").unwrap(), "142.250.187.206");
+        assert_eq!(string_ip_key(Some("142.250.187.206")), "142.250.187.206");
         // Check that IPv4 mapped addresses are preserved
-        assert_eq!(ip_key("::FFFF:142.250.187.206").unwrap(), "142.250.187.206");
+        assert_eq!(
+            string_ip_key(Some("::FFFF:142.250.187.206")),
+            "142.250.187.206"
+        );
         // Check that IPv6 addresses are grouped into /64 subnets
         assert_eq!(
-            ip_key("2a00:1450:4009:81f::200e").unwrap(),
+            string_ip_key(Some("2a00:1450:4009:81f::200e")),
             "2a00:1450:4009:81f::/64"
+        );
+    }
+    #[test]
+    fn test_get_ip() {
+        // Check that IPv4 addresses are preserved
+        assert_eq!(
+            raw_ip_key(Some("142.250.187.206")),
+            "142.250.187.206".parse::<IpAddr>().unwrap().into()
+        );
+        // Check that IPv6 addresses are grouped into /64 subnets
+        assert_eq!(
+            dbg!(raw_ip_key(Some("2a00:1450:4009:81f::200e"))),
+            MyIpAddr::V6([0x2a00, 0x1450, 0x4009, 0x81f])
+        );
+        assert_eq!(
+            raw_ip_key(Some("[2a00:1450:4009:81f::200e]:123")),
+            MyIpAddr::V6([0x2a00, 0x1450, 0x4009, 0x81f])
         );
     }
 }
