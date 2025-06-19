@@ -47,6 +47,11 @@ where
     }
 }
 
+impl Default for InMemoryBackend {
+    fn default() -> Self {
+        InMemoryBackend::<String>::builder().build()
+    }
+}
 pub struct Builder {
     gc_interval: Option<Duration>,
 }
@@ -151,7 +156,7 @@ mod tests {
     #[actix_web::test]
     async fn test_allow_deny() {
         tokio::time::pause();
-        let backend = InMemoryBackend::<String>::builder().build();
+        let backend = InMemoryBackend::default();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 5,
@@ -255,7 +260,7 @@ mod tests {
     #[actix_web::test]
     async fn test_rollback() {
         tokio::time::pause();
-        let backend = InMemoryBackend::<String>::builder().build();
+        let backend = InMemoryBackend::default();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 5,
@@ -272,9 +277,7 @@ mod tests {
     #[actix_web::test]
     async fn test_remove_key() {
         tokio::time::pause();
-        let backend = InMemoryBackend::<String>::builder()
-            .with_gc_interval(None)
-            .build();
+        let backend = InMemoryBackend::default();
         let input = SimpleInput {
             interval: MINUTE,
             max_requests: 1,

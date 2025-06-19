@@ -84,7 +84,7 @@ pub trait Backend<I: 'static = SimpleInput<String>>: Clone {
 ///
 /// This may not be suitable for all use-cases.
 #[derive(Debug, Clone)]
-pub struct SimpleInput<T> {
+pub struct SimpleInput<T = String> {
     /// The rate limiting interval.
     pub interval: Duration,
     /// The total requests to be allowed within the interval.
