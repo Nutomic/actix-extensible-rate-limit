@@ -9,7 +9,7 @@ pub mod memory;
 pub mod redis;
 
 pub use input_builder::{
-    raw_ip_key, string_ip_key, MyIpAddr, SimpleInputFunctionBuilder, SimpleInputFuture,
+    raw_ip_key, string_ip_key, RateLimitIpAddr, SimpleInputFunctionBuilder, SimpleInputFuture,
 };
 use std::future::Future;
 

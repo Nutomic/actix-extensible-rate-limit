@@ -158,22 +158,22 @@ pub fn string_ip_key(ip_str: Option<&str>) -> String {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum MyIpAddr {
+pub enum RateLimitIpAddr {
     V4(Ipv4Addr),
     V6([u16; 4]),
 }
 
-impl From<IpAddr> for MyIpAddr {
+impl From<IpAddr> for RateLimitIpAddr {
     fn from(value: IpAddr) -> Self {
         match value {
-            IpAddr::V4(addr) => MyIpAddr::V4(addr),
-            IpAddr::V6(addr) => MyIpAddr::V6(addr.segments()[..4].try_into().unwrap()),
+            IpAddr::V4(addr) => RateLimitIpAddr::V4(addr),
+            IpAddr::V6(addr) => RateLimitIpAddr::V6(addr.segments()[..4].try_into().unwrap()),
         }
     }
 }
 
 /// Generate a raw byte key for backend which uses less memory.
-pub fn raw_ip_key(ip_str: Option<&str>) -> MyIpAddr {
+pub fn raw_ip_key(ip_str: Option<&str>) -> RateLimitIpAddr {
     parse_ip(ip_str).into()
 }
 
@@ -217,11 +217,11 @@ mod tests {
         // Check that IPv6 addresses are grouped into /64 subnets
         assert_eq!(
             dbg!(raw_ip_key(Some("2a00:1450:4009:81f::200e"))),
-            MyIpAddr::V6([0x2a00, 0x1450, 0x4009, 0x81f])
+            RateLimitIpAddr::V6([0x2a00, 0x1450, 0x4009, 0x81f])
         );
         assert_eq!(
             raw_ip_key(Some("[2a00:1450:4009:81f::200e]:123")),
-            MyIpAddr::V6([0x2a00, 0x1450, 0x4009, 0x81f])
+            RateLimitIpAddr::V6([0x2a00, 0x1450, 0x4009, 0x81f])
         );
     }
 }
