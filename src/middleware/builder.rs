@@ -1,4 +1,4 @@
-use crate::backend::Backend;
+use crate::backend::{Backend, Input};
 use crate::middleware::{AllowedTransformation, DeniedResponse, RateLimiter, RollbackCondition};
 use actix_web::dev::ServiceRequest;
 use actix_web::http::header::{HeaderMap, HeaderName, HeaderValue, RETRY_AFTER};
@@ -26,7 +26,7 @@ pub struct RateLimiterBuilder<BE, BO, F> {
 impl<BE, BI, BO, F, O> RateLimiterBuilder<BE, BO, F>
 where
     BE: Backend<BI, Output = BO> + 'static,
-    BI: 'static,
+    BI: Input + 'static,
     F: Fn(&ServiceRequest) -> O,
     O: Future<Output = Result<BI, actix_web::Error>>,
 {

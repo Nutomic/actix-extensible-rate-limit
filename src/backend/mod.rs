@@ -44,7 +44,7 @@ impl Decision {
 /// A Backend is required to implement [Clone], usually this means wrapping your data store within
 /// an [Arc](std::sync::Arc), although many connection pools already do so internally; there is no
 /// need to wrap it twice.
-pub trait Backend<I: Input>: Clone {
+pub trait Backend<I: Input + 'static = SimpleInput>: Clone {
     type Output;
     type RollbackToken;
     type Error;
@@ -92,12 +92,15 @@ pub struct SimpleInput {
 }
 
 pub trait Input {
+    type Key: Clone;
     fn interval(&self) -> Duration {todo!()}
     fn max_requests(&self) -> u64 {todo!()}
-    fn key(&self) -> String {todo!()}
+    fn key(&self) -> Self::Key {todo!()}
 }
 
-impl Input for SimpleInput {}
+impl Input for SimpleInput {
+    type Key= String;
+}
 
 /// A default [Backend::Output] structure.
 ///

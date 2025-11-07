@@ -4,15 +4,15 @@ use actix_web::rt::time::Instant;
 use dashmap::DashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::Duration;use std::hash::Hash;
 
 pub const DEFAULT_GC_INTERVAL_SECONDS: u64 = 60 * 10;
 
 /// A Fixed Window rate limiter [Backend] that uses [Dashmap](dashmap::DashMap) to store keys
 /// in memory.
 #[derive(Clone)]
-pub struct InMemoryBackend {
-    map: Arc<DashMap<String, Value>>,
+pub struct InMemoryBackend<T: Clone = String> {
+    map: Arc<DashMap<T, Value>>,
     gc_handle: Option<Arc<JoinHandle<()>>>,
 }
 
@@ -21,14 +21,14 @@ struct Value {
     count: u64,
 }
 
-impl InMemoryBackend {
+impl <T:Clone + Eq+ Hash + 'static>InMemoryBackend<T> {
     pub fn builder() -> Builder {
         Builder {
             gc_interval: Some(Duration::from_secs(DEFAULT_GC_INTERVAL_SECONDS)),
         }
     }
 
-    fn garbage_collector(map: Arc<DashMap<String, Value>>, interval: Duration) -> JoinHandle<()> {
+    fn garbage_collector(map: Arc<DashMap<T, Value>>, interval: Duration) -> JoinHandle<()> {
         assert!(
             interval.as_secs_f64() > 0f64,
             "GC interval must be non-zero"
@@ -58,8 +58,8 @@ impl Builder {
         self
     }
 
-    pub fn build(self) -> InMemoryBackend {
-        let map = Arc::new(DashMap::<String, Value>::new());
+    pub fn build<T:Clone + Eq + Hash + 'static>(self) -> InMemoryBackend<T> {
+        let map = Arc::new(DashMap::<T, Value>::new());
         let gc_handle = self.gc_interval.map(|gc_interval| {
             Arc::new(InMemoryBackend::garbage_collector(map.clone(), gc_interval))
         });
@@ -67,9 +67,9 @@ impl Builder {
     }
 }
 
-impl<I:Input> Backend<I> for InMemoryBackend {
+impl<I:Input + 'static> Backend<I> for InMemoryBackend<I::Key> where <I as Input>::Key: Eq + Hash {
     type Output = SimpleOutput;
-    type RollbackToken = String;
+    type RollbackToken = I::Key;
     type Error = Infallible;
 
     async fn request(
@@ -124,7 +124,7 @@ impl SimpleBackend for InMemoryBackend {
     }
 }
 
-impl Drop for InMemoryBackend {
+impl<I:Clone> Drop for InMemoryBackend<I> {
     fn drop(&mut self) {
         if let Some(handle) = &self.gc_handle {
             handle.abort();
