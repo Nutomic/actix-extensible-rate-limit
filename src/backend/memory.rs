@@ -1,4 +1,4 @@
-use crate::backend::{Backend, Decision, SimpleBackend, SimpleInput, SimpleOutput};
+use crate::backend::{Backend, Decision, Input, SimpleBackend, SimpleOutput};
 use actix_web::rt::task::JoinHandle;
 use actix_web::rt::time::Instant;
 use dashmap::DashMap;
@@ -67,22 +67,22 @@ impl Builder {
     }
 }
 
-impl Backend<SimpleInput> for InMemoryBackend {
+impl<I:Input> Backend<I> for InMemoryBackend {
     type Output = SimpleOutput;
     type RollbackToken = String;
     type Error = Infallible;
 
     async fn request(
         &self,
-        input: SimpleInput,
+        input: I,
     ) -> Result<(Decision, Self::Output, Self::RollbackToken), Self::Error> {
         let now = Instant::now();
         let mut count = 1;
         let mut expiry = now
-            .checked_add(input.interval)
+            .checked_add(input.interval())
             .expect("Interval unexpectedly large");
         self.map
-            .entry(input.key.clone())
+            .entry(input.key().clone())
             .and_modify(|v| {
                 // If this bucket hasn't yet expired, increment and extract the count/expiry
                 if v.ttl > now {
@@ -100,13 +100,13 @@ impl Backend<SimpleInput> for InMemoryBackend {
                 ttl: expiry,
                 count,
             });
-        let allow = count <= input.max_requests;
+        let allow = count <= input.max_requests();
         let output = SimpleOutput {
-            limit: input.max_requests,
-            remaining: input.max_requests.saturating_sub(count),
+            limit: input.max_requests(),
+            remaining: input.max_requests().saturating_sub(count),
             reset: expiry,
         };
-        Ok((Decision::from_allowed(allow), output, input.key))
+        Ok((Decision::from_allowed(allow), output, input.key()))
     }
 
     async fn rollback(&self, token: Self::RollbackToken) -> Result<(), Self::Error> {

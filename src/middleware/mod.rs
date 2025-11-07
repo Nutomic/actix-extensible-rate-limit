@@ -2,7 +2,7 @@ pub mod builder;
 #[cfg(test)]
 mod tests;
 
-use crate::backend::Backend;
+use crate::backend::{Backend, Input};
 use actix_web::body::EitherBody;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::http::header::HeaderMap;
@@ -30,7 +30,7 @@ pub struct RateLimiter<BA, BO, F> {
 impl<BA, BI, BO, F, O> Clone for RateLimiter<BA, BO, F>
 where
     BA: Backend<BI> + 'static,
-    BI: 'static,
+    BI: Input + 'static,
     F: Fn(&ServiceRequest) -> O + 'static,
     O: Future<Output = Result<BI, actix_web::Error>>,
 {
@@ -49,7 +49,7 @@ where
 impl<BA, BI, BO, F, O> RateLimiter<BA, BO, F>
 where
     BA: Backend<BI, Output = BO> + 'static,
-    BI: 'static,
+    BI: Input + 'static,
     F: Fn(&ServiceRequest) -> O + 'static,
     O: Future<Output = Result<BI, actix_web::Error>>,
 {
@@ -68,7 +68,7 @@ where
     S::Future: 'static,
     B: 'static,
     BA: Backend<BI, Output = BO, Error = BE> + 'static,
-    BI: 'static,
+    BI: Input +'static,
     BO: 'static,
     BE: Into<actix_web::Error> + std::fmt::Display + 'static,
     F: Fn(&ServiceRequest) -> O + 'static,
@@ -109,7 +109,7 @@ where
     S::Future: 'static,
     B: 'static,
     BA: Backend<BI, Output = BO, Error = BE> + 'static,
-    BI: 'static,
+    BI: Input +'static,
     BO: 'static,
     BE: Into<actix_web::Error> + std::fmt::Display + 'static,
     F: Fn(&ServiceRequest) -> O + 'static,
